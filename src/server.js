@@ -5,15 +5,20 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const connectDB = require('./config/db');
 
-// ── Connect to MongoDB ──
-connectDB();
-
 const app = express();
+
+// ── Connect to MongoDB (awaited per-request for serverless cold starts) ──
+app.use(async (req, res, next) => {
+  await connectDB();
+  next();
+});
 
 // ── Global Middleware ──
 app.use(helmet());
+
+const corsOrigin = (process.env.CORS_ORIGIN || 'http://localhost:3000').trim();
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: corsOrigin === '*' ? true : corsOrigin,
   credentials: true,
 }));
 app.use(express.json({ limit: '10kb' }));
@@ -87,10 +92,12 @@ app.use((err, req, res, _next) => {
   });
 });
 
-// ── Start Server ──
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Dietly API running on port ${PORT} [${process.env.NODE_ENV}]`);
-});
+// ── Start Server (local only, Vercel uses serverless export) ──
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`🚀 Dietly API running on port ${PORT} [${process.env.NODE_ENV}]`);
+  });
+}
 
 module.exports = app;
