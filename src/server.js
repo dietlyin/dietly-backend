@@ -16,9 +16,17 @@ app.use(async (req, res, next) => {
 // ── Global Middleware ──
 app.use(helmet());
 
-const corsOrigin = (process.env.CORS_ORIGIN || 'http://localhost:3000').trim();
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://frontend-eight-peach-93.vercel.app',
+  process.env.CORS_ORIGIN,
+].filter(Boolean).map(s => s.trim());
+
 app.use(cors({
-  origin: corsOrigin === '*' ? true : corsOrigin,
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    cb(null, false);
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10kb' }));
