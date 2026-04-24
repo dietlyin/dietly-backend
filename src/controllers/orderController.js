@@ -1,24 +1,76 @@
 const Order = require('../models/Order');
 const Plan = require('../models/Plan');
 const User = require('../models/User');
+const DeliveryAgent = require('../models/DeliveryAgent');
+
+const normalizeDeliveryLocation = ({ latitude, longitude, deliveryLocation }) => {
+  const rawLat = latitude ?? deliveryLocation?.lat;
+  const rawLng = longitude ?? deliveryLocation?.lng;
+
+  const lat = Number(rawLat);
+  const lng = Number(rawLng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return undefined;
+  }
+
+  return { lat, lng };
+};
 
 // @desc    Create a new order / subscribe to a plan
 // @route   POST /api/orders
 exports.createOrder = async (req, res, next) => {
   try {
-    const { planId, deliveryAddress, deliverySlot, notes } = req.body;
+    const {
+      planId,
+      customerName,
+      phone,
+      addressText,
+      deliveryAddress,
+      deliverySlot,
+      notes,
+      quantity,
+      latitude,
+      longitude,
+      deliveryLocation,
+      orderDetails,
+    } = req.body;
 
     const plan = await Plan.findById(planId);
     if (!plan || !plan.isActive) {
       return res.status(404).json({ success: false, message: 'Plan not found or inactive' });
     }
 
+    const normalizedLocation = normalizeDeliveryLocation({ latitude, longitude, deliveryLocation });
+    if (!normalizedLocation) {
+      return res.status(400).json({ success: false, message: 'Delivery location coordinates are required' });
+    }
+
+    const assignedDeliveryAgent = await DeliveryAgent.findOne({ isActive: true }).sort({ lastSeenAt: 1, createdAt: 1 });
+    const orderQuantity = Math.max(1, parseInt(quantity, 10) || 1);
+    const totalAmount = plan.price * orderQuantity;
+    const resolvedCustomerName = String(customerName || req.user.name || '').trim();
+    const resolvedCustomerPhone = String(phone || req.user.phone || '').trim();
+    const resolvedAddressText = String(addressText || deliveryAddress?.street || '').trim();
+
     const order = await Order.create({
       user: req.user.id,
       plan: planId,
-      amount: plan.price,
+      amount: totalAmount,
+      customerName: resolvedCustomerName,
+      customerPhone: resolvedCustomerPhone,
       deliveryAddress,
+      addressText: resolvedAddressText,
+      latitude: normalizedLocation.lat,
+      longitude: normalizedLocation.lng,
+      deliveryLocation: normalizedLocation,
       deliverySlot,
+      orderDetails: {
+        mealPlanName: plan.name,
+        quantity: orderQuantity,
+        specialInstructions: orderDetails?.specialInstructions || notes,
+      },
+      assignedDeliveryAgent: assignedDeliveryAgent?._id,
       notes,
     });
 
@@ -28,9 +80,14 @@ exports.createOrder = async (req, res, next) => {
       subscriptionStatus: 'active',
       subscriptionStart: new Date(),
       subscriptionEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // +30 days
+      ...(resolvedCustomerPhone ? { phone: resolvedCustomerPhone } : {}),
     });
 
-    const populated = await order.populate(['plan', 'user']);
+    const populated = await order.populate([
+      'plan',
+      'user',
+      { path: 'assignedDeliveryAgent', select: 'name phone vehicleType zone' },
+    ]);
 
     res.status(201).json({ success: true, data: populated });
   } catch (err) {
@@ -49,6 +106,7 @@ exports.getMyOrders = async (req, res, next) => {
     const [orders, total] = await Promise.all([
       Order.find({ user: req.user.id })
         .populate('plan', 'name price')
+        .populate('assignedDeliveryAgent', 'name phone vehicleType')
         .sort('-createdAt')
         .skip(skip)
         .limit(limit),
@@ -72,7 +130,11 @@ exports.getMyOrders = async (req, res, next) => {
 // @route   GET /api/orders/:id
 exports.getOrder = async (req, res, next) => {
   try {
-    const order = await Order.findById(req.params.id).populate(['plan', 'meals.meal']);
+    const order = await Order.findById(req.params.id).populate([
+      'plan',
+      'meals.meal',
+      { path: 'assignedDeliveryAgent', select: 'name phone vehicleType zone' },
+    ]);
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
@@ -156,8 +218,9 @@ exports.getAllOrders = async (req, res, next) => {
 
     const [orders, total] = await Promise.all([
       Order.find(filter)
-        .populate('user', 'name email')
+        .populate('user', 'name email phone')
         .populate('plan', 'name price')
+        .populate('assignedDeliveryAgent', 'name phone vehicleType zone')
         .sort('-createdAt')
         .skip(skip)
         .limit(limit),

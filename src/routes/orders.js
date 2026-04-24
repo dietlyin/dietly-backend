@@ -15,7 +15,15 @@ router.route('/')
   .get(protect, getMyOrders)
   .post(protect, [
     body('planId').notEmpty().withMessage('Plan ID is required'),
-    body('deliveryAddress.pincode').optional().matches(/^\d{6}$/).withMessage('Invalid pincode'),
+    body('customerName').trim().notEmpty().withMessage('Customer name is required').isLength({ max: 100 }),
+    body('phone').matches(/^[+]?[\d\s-]{10,15}$/).withMessage('Valid phone number is required'),
+    body('addressText').trim().notEmpty().withMessage('Address text is required').isLength({ max: 300 }),
+    body('quantity').optional().isInt({ min: 1, max: 30 }).withMessage('Quantity must be between 1 and 30'),
+    body('deliveryAddress.city').trim().notEmpty().withMessage('City is required'),
+    body('deliveryAddress.state').trim().notEmpty().withMessage('State is required'),
+    body('deliveryAddress.pincode').matches(/^\d{6}$/).withMessage('Invalid pincode'),
+    body('latitude').isFloat({ min: -90, max: 90 }).withMessage('Latitude must be valid'),
+    body('longitude').isFloat({ min: -180, max: 180 }).withMessage('Longitude must be valid'),
   ], validate, createOrder);
 
 router.route('/:id')

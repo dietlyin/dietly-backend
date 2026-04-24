@@ -27,6 +27,14 @@ const orderSchema = new mongoose.Schema({
     required: [true, 'Amount is required'],
     min: [0, 'Amount cannot be negative'],
   },
+  customerName: {
+    type: String,
+    trim: true,
+  },
+  customerPhone: {
+    type: String,
+    trim: true,
+  },
   status: {
     type: String,
     enum: ['pending', 'confirmed', 'preparing', 'out-for-delivery', 'delivered', 'cancelled'],
@@ -44,9 +52,36 @@ const orderSchema = new mongoose.Schema({
     state: String,
     pincode: String,
   },
+  addressText: {
+    type: String,
+    trim: true,
+  },
+  latitude: Number,
+  longitude: Number,
+  deliveryLocation: {
+    lat: Number,
+    lng: Number,
+  },
   deliverySlot: {
     type: String,
   },
+  orderDetails: {
+    mealPlanName: String,
+    quantity: {
+      type: Number,
+      min: [1, 'Quantity must be at least 1'],
+      default: 1,
+    },
+    specialInstructions: {
+      type: String,
+      maxlength: [500, 'Special instructions cannot exceed 500 characters'],
+    },
+  },
+  assignedDeliveryAgent: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'DeliveryAgent',
+  },
+  deliveredAt: Date,
   notes: {
     type: String,
     maxlength: [500, 'Notes cannot exceed 500 characters'],
@@ -57,5 +92,6 @@ const orderSchema = new mongoose.Schema({
 
 orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ status: 1 });
+orderSchema.index({ assignedDeliveryAgent: 1, status: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Order', orderSchema);

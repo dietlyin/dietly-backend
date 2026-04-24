@@ -16,11 +16,19 @@ app.use(async (req, res, next) => {
 // ── Global Middleware ──
 app.use(helmet());
 
+const configuredOrigins = String(process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 const allowedOrigins = [
   'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
   'https://frontend-eight-peach-93.vercel.app',
-  process.env.CORS_ORIGIN,
-].filter(Boolean).map(s => s.trim());
+  ...configuredOrigins,
+];
 
 app.use(cors({
   origin: (origin, cb) => {
@@ -49,6 +57,7 @@ const authLimiter = rateLimit({
   message: { success: false, message: 'Too many auth attempts, please try again later.' },
 });
 app.use('/api/auth', authLimiter);
+app.use('/api/delivery/login', authLimiter);
 
 // ── Routes ──
 app.use('/api/auth', require('./routes/auth'));
@@ -58,6 +67,7 @@ app.use('/api/testimonials', require('./routes/testimonials'));
 app.use('/api/faqs', require('./routes/faqs'));
 app.use('/api/stats', require('./routes/stats'));
 app.use('/api/orders', require('./routes/orders'));
+app.use('/api/delivery', require('./routes/delivery'));
 app.use('/api/contact', require('./routes/contact'));
 app.use('/api/gym-partnership', require('./routes/gymPartnership'));
 app.use('/api/users', require('./routes/users'));

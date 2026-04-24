@@ -6,6 +6,7 @@ const Testimonial = require('../models/Testimonial');
 const FAQ = require('../models/FAQ');
 const Stat = require('../models/Stat');
 const User = require('../models/User');
+const DeliveryAgent = require('../models/DeliveryAgent');
 
 const plans = [
   {
@@ -271,6 +272,7 @@ const seedDB = async () => {
       Testimonial.deleteMany(),
       FAQ.deleteMany(),
       Stat.deleteMany(),
+      DeliveryAgent.deleteMany(),
     ]);
     console.log('🗑️  Cleared existing data');
 
@@ -296,6 +298,17 @@ const seedDB = async () => {
       });
       console.log('👤 Created admin user (admin@dietly.in / admin123456)');
     }
+
+    await DeliveryAgent.create({
+      name: 'Rohit Courier',
+      email: 'delivery@dietly.in',
+      phone: '+919876543210',
+      password: 'delivery123',
+      vehicleType: 'bike',
+      zone: 'South Nagpur',
+      isActive: true,
+    });
+    console.log('🛵 Created delivery agent (delivery@dietly.in / delivery123)');
 
     console.log('\n✅ Database seeded successfully!');
     process.exit(0);
