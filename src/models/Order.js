@@ -52,6 +52,10 @@ const orderSchema = new mongoose.Schema({
     state: String,
     pincode: String,
   },
+  deliveryLocationName: {
+    type: String,
+    trim: true,
+  },
   addressText: {
     type: String,
     trim: true,
@@ -64,6 +68,37 @@ const orderSchema = new mongoose.Schema({
   },
   deliverySlot: {
     type: String,
+  },
+  pricing: {
+    planAmount: {
+      type: Number,
+      min: [0, 'Plan amount cannot be negative'],
+      default: 0,
+    },
+    deliveryCharge: {
+      type: Number,
+      min: [0, 'Delivery charge cannot be negative'],
+      default: 0,
+    },
+    totalAmount: {
+      type: Number,
+      min: [0, 'Total amount cannot be negative'],
+      default: 0,
+    },
+    distanceKm: {
+      type: Number,
+      min: [0, 'Distance cannot be negative'],
+      default: 0,
+    },
+    freeDeliveryRadiusKm: {
+      type: Number,
+      min: [0, 'Free delivery radius cannot be negative'],
+      default: 2,
+    },
+    isFreeDelivery: {
+      type: Boolean,
+      default: true,
+    },
   },
   orderDetails: {
     mealPlanName: String,

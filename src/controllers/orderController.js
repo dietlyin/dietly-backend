@@ -3,6 +3,46 @@ const Plan = require('../models/Plan');
 const User = require('../models/User');
 const DeliveryAgent = require('../models/DeliveryAgent');
 
+const DELIVERY_HUB = {
+  lat: 21.117164,
+  lng: 79.098231,
+};
+const FREE_DELIVERY_RADIUS_KM = 2;
+const EXTRA_DELIVERY_CHARGE_PER_KM = 10;
+
+const toRadians = (value) => (value * Math.PI) / 180;
+
+const calculateDistanceKm = (origin, destination) => {
+  const earthRadiusKm = 6371;
+  const latDelta = toRadians(destination.lat - origin.lat);
+  const lngDelta = toRadians(destination.lng - origin.lng);
+
+  const a = Math.sin(latDelta / 2) ** 2
+    + Math.cos(toRadians(origin.lat))
+    * Math.cos(toRadians(destination.lat))
+    * Math.sin(lngDelta / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const calculateDeliveryPricing = ({ lat, lng }, planAmount) => {
+  const rawDistanceKm = calculateDistanceKm(DELIVERY_HUB, { lat, lng });
+  const distanceKm = Number(rawDistanceKm.toFixed(2));
+  const extraDistanceKm = Math.max(distanceKm - FREE_DELIVERY_RADIUS_KM, 0);
+  const deliveryCharge = extraDistanceKm > 0
+    ? Math.ceil(extraDistanceKm) * EXTRA_DELIVERY_CHARGE_PER_KM
+    : 0;
+
+  return {
+    distanceKm,
+    planAmount,
+    deliveryCharge,
+    totalAmount: planAmount + deliveryCharge,
+    freeDeliveryRadiusKm: FREE_DELIVERY_RADIUS_KM,
+    isFreeDelivery: deliveryCharge === 0,
+  };
+};
+
 const normalizeDeliveryLocation = ({ latitude, longitude, deliveryLocation }) => {
   const rawLat = latitude ?? deliveryLocation?.lat;
   const rawLng = longitude ?? deliveryLocation?.lng;
@@ -26,6 +66,7 @@ exports.createOrder = async (req, res, next) => {
       customerName,
       phone,
       addressText,
+      deliveryLocationName,
       deliveryAddress,
       deliverySlot,
       notes,
@@ -48,23 +89,27 @@ exports.createOrder = async (req, res, next) => {
 
     const assignedDeliveryAgent = await DeliveryAgent.findOne({ isActive: true }).sort({ lastSeenAt: 1, createdAt: 1 });
     const orderQuantity = Math.max(1, parseInt(quantity, 10) || 1);
-    const totalAmount = plan.price * orderQuantity;
+    const planAmount = plan.price * orderQuantity;
+    const pricing = calculateDeliveryPricing(normalizedLocation, planAmount);
     const resolvedCustomerName = String(customerName || req.user.name || '').trim();
     const resolvedCustomerPhone = String(phone || req.user.phone || '').trim();
     const resolvedAddressText = String(addressText || deliveryAddress?.street || '').trim();
+    const resolvedLocationName = String(deliveryLocationName || '').trim();
 
     const order = await Order.create({
       user: req.user.id,
       plan: planId,
-      amount: totalAmount,
+      amount: pricing.totalAmount,
       customerName: resolvedCustomerName,
       customerPhone: resolvedCustomerPhone,
       deliveryAddress,
+      deliveryLocationName: resolvedLocationName,
       addressText: resolvedAddressText,
       latitude: normalizedLocation.lat,
       longitude: normalizedLocation.lng,
       deliveryLocation: normalizedLocation,
       deliverySlot,
+      pricing,
       orderDetails: {
         mealPlanName: plan.name,
         quantity: orderQuantity,

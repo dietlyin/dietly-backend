@@ -17,6 +17,7 @@ router.route('/')
     body('planId').notEmpty().withMessage('Plan ID is required'),
     body('customerName').trim().notEmpty().withMessage('Customer name is required').isLength({ max: 100 }),
     body('phone').matches(/^[+]?[\d\s-]{10,15}$/).withMessage('Valid phone number is required'),
+    body('deliveryLocationName').trim().notEmpty().withMessage('Location name is required').isLength({ max: 120 }),
     body('addressText').trim().notEmpty().withMessage('Address text is required').isLength({ max: 300 }),
     body('quantity').optional().isInt({ min: 1, max: 30 }).withMessage('Quantity must be between 1 and 30'),
     body('deliveryAddress.city').trim().notEmpty().withMessage('City is required'),
