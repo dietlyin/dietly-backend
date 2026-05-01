@@ -50,10 +50,7 @@ jobs:
         working-directory: frontend
         run: |
           set -euo pipefail
-          grep -Fn "https://api.dietly.in/api" src/services/api.js >/dev/null || {
-            echo "Missing production API URL (https://api.dietly.in/api) in frontend API config"
-            exit 1
-          }
+          node -e "const fs=require('fs');const f=fs.readFileSync('src/services/api.js','utf8');if(!f.includes('https://api.dietly.in/api')){console.error('Missing production API URL (https://api.dietly.in/api) in frontend API config');process.exit(1)}"
 
       - name: Block localhost URLs in frontend source
         working-directory: frontend
@@ -138,10 +135,7 @@ jobs:
         working-directory: backend
         run: |
           set -euo pipefail
-          grep -Fn "app.options('/{*any}', cors(corsOptions));" src/server.js >/dev/null
-          grep -Fn "allowedHeaders: ['Content-Type', 'Authorization']" src/server.js >/dev/null
-          grep -Fn "methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']" src/server.js >/dev/null
-          grep -Fn "process.env.CORS_ORIGIN" src/server.js >/dev/null
+          node -e "const fs=require('fs');const s=fs.readFileSync('src/server.js','utf8');const checks=[s.includes("app.options('/{*any}', cors(corsOptions));"),s.includes("allowedHeaders: ['Content-Type', 'Authorization']"),s.includes("methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']"),s.includes('process.env.CORS_ORIGIN')];if(checks.includes(false)){console.error('CORS config check failed in src/server.js');process.exit(1)}"
 
       - name: Ensure backend starts without crashing
         working-directory: backend
