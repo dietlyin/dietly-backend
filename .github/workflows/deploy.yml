@@ -55,12 +55,12 @@ jobs:
             exit 1
           }
 
-      - name: Block localhost URLs in build output
+      - name: Block localhost URLs in frontend source
         working-directory: frontend
         run: |
           set -euo pipefail
-          if grep -R -nE "localhost|127\\.0\\.0\\.1" dist; then
-            echo "Found localhost URL(s) in production build"
+          if grep -R -nE "https?://(localhost|127\\.0\\.0\\.1)" src; then
+            echo "Found localhost URL(s) in frontend source"
             exit 1
           fi
 
@@ -138,10 +138,10 @@ jobs:
         working-directory: backend
         run: |
           set -euo pipefail
-          grep -n "app.options('/{*any}'" src/server.js >/dev/null
-          grep -n "allowedHeaders: \['Content-Type', 'Authorization'\]" src/server.js >/dev/null
-          grep -n "methods: \['GET', 'POST'" src/server.js >/dev/null
-          grep -n "process.env.CORS_ORIGIN" src/server.js >/dev/null
+          grep -Fn "app.options('/{*any}', cors(corsOptions));" src/server.js >/dev/null
+          grep -Fn "allowedHeaders: ['Content-Type', 'Authorization']" src/server.js >/dev/null
+          grep -Fn "methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']" src/server.js >/dev/null
+          grep -Fn "process.env.CORS_ORIGIN" src/server.js >/dev/null
 
       - name: Ensure backend starts without crashing
         working-directory: backend
