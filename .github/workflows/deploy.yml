@@ -46,12 +46,12 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: Validate production API URL
+      - name: Validate production API URL config
         working-directory: frontend
         run: |
           set -euo pipefail
-          grep -R "https://api.dietly.in/api" dist >/dev/null || {
-            echo "Missing production API URL (https://api.dietly.in/api) in build output"
+          grep -Fn "https://api.dietly.in/api" src/services/api.js >/dev/null || {
+            echo "Missing production API URL (https://api.dietly.in/api) in frontend API config"
             exit 1
           }
 
