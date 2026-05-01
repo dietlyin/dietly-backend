@@ -2,6 +2,7 @@ const Order = require('../models/Order');
 const Plan = require('../models/Plan');
 const User = require('../models/User');
 const DeliveryAgent = require('../models/DeliveryAgent');
+const { sendPlanEnrollmentWhatsAppNotification } = require('../utils/whatsappNotifier');
 
 const DELIVERY_HUB = {
   lat: 21.117164,
@@ -133,6 +134,15 @@ exports.createOrder = async (req, res, next) => {
       'user',
       { path: 'assignedDeliveryAgent', select: 'name phone vehicleType zone' },
     ]);
+
+    // WhatsApp alert is best-effort; order creation must not fail if notification fails.
+    sendPlanEnrollmentWhatsAppNotification({
+      order: populated,
+      user: req.user,
+      plan,
+    }).catch((notifyError) => {
+      console.error('WhatsApp enrollment notification failed:', notifyError.message);
+    });
 
     res.status(201).json({ success: true, data: populated });
   } catch (err) {

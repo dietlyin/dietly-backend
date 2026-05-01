@@ -89,6 +89,15 @@ C:\Dietly\
 | `JWT_EXPIRE`  | JWT expiry (e.g. `7d`)                 |
 | `CORS_ORIGIN` | Comma-separated allowed origins        |
 
+### Optional WhatsApp Enrollment Alerts
+| Variable | Purpose |
+|----------|---------|
+| `WHATSAPP_NOTIFY_ENABLED` | Set `true` to enable WhatsApp alert after `POST /api/orders` |
+| `WHATSAPP_NOTIFY_PHONE` | Destination WhatsApp number in international digits-only format (e.g. `919011154118`) |
+| `WHATSAPP_NOTIFY_API_KEY` | CallMeBot API key mapped to destination number |
+
+When enabled, every successful enrollment sends a message containing customer info, plan, amount, address, slot, coordinates, and map link.
+
 **Never commit `.env` files.** Both repos have `.env` in `.gitignore`.
 
 ---
