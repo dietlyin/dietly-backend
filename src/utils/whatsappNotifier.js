@@ -1,30 +1,36 @@
 const https = require('https');
 
-const WHATSAPP_API_URL = 'https://api.callmebot.com/whatsapp.php';
+const TELEGRAM_API_BASE = 'https://api.telegram.org';
 
 const asText = (value, fallback = 'N/A') => {
   const text = String(value ?? '').trim();
   return text || fallback;
 };
 
-const normalizePhoneForApi = (value) => String(value ?? '').replace(/\D/g, '');
+const httpPost = (url, body, timeoutMs = 10000) => new Promise((resolve, reject) => {
+  const payload = JSON.stringify(body);
+  const urlObj = new URL(url);
+  const options = {
+    hostname: urlObj.hostname,
+    path: urlObj.pathname,
+    method: 'POST',
+    timeout: timeoutMs,
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload),
+    },
+  };
 
-const httpGet = (url, timeoutMs = 10000) => new Promise((resolve, reject) => {
-  const req = https.get(url, { timeout: timeoutMs }, (res) => {
-    let body = '';
-    res.on('data', (chunk) => {
-      body += chunk;
-    });
-    res.on('end', () => {
-      resolve({ statusCode: res.statusCode, body });
-    });
+  const req = https.request(options, (res) => {
+    let data = '';
+    res.on('data', (chunk) => { data += chunk; });
+    res.on('end', () => resolve({ statusCode: res.statusCode, body: data }));
   });
 
-  req.on('timeout', () => {
-    req.destroy(new Error('WhatsApp API request timed out'));
-  });
-
+  req.on('timeout', () => req.destroy(new Error('Telegram API request timed out')));
   req.on('error', reject);
+  req.write(payload);
+  req.end();
 });
 
 const buildEnrollmentMessage = ({ order, user, plan }) => {
@@ -38,27 +44,26 @@ const buildEnrollmentMessage = ({ order, user, plan }) => {
     : 'N/A';
 
   return [
-    'New Plan Enrollment - Dietly',
+    '🍱 *New Plan Enrollment — Dietly*',
     '',
-    `Order ID: ${asText(order._id)}`,
-    `Plan: ${planName}`,
-    `Quantity: ${quantity}`,
-    `Amount: INR ${amount}`,
-    `Delivery Slot: ${asText(order.deliverySlot)}`,
+    `📋 *Order ID:* ${asText(order._id)}`,
+    `📦 *Plan:* ${planName}`,
+    `🔢 *Quantity:* ${quantity}`,
+    `💰 *Amount:* ₹${amount}`,
+    `🕐 *Delivery Slot:* ${asText(order.deliverySlot)}`,
     '',
-    `Customer Name: ${asText(order.customerName || user?.name)}`,
-    `Customer Phone: ${asText(order.customerPhone || user?.phone)}`,
-    `Customer Email: ${asText(user?.email)}`,
+    `👤 *Customer Name:* ${asText(order.customerName || user?.name)}`,
+    `📞 *Phone:* ${asText(order.customerPhone || user?.phone)}`,
+    `📧 *Email:* ${asText(user?.email)}`,
     '',
-    `Location Name: ${asText(order.deliveryLocationName)}`,
-    `Address: ${asText(order.addressText || address.street)}`,
-    `City/State: ${asText(address.city)}/${asText(address.state)}`,
-    `Pincode: ${asText(address.pincode)}`,
-    `Coordinates: ${asText(location.lat)}, ${asText(location.lng)}`,
-    `Map: ${mapsLink}`,
+    `📍 *Location:* ${asText(order.deliveryLocationName)}`,
+    `🏠 *Address:* ${asText(order.addressText || address.street)}`,
+    `🏙️ *City/State:* ${asText(address.city)} / ${asText(address.state)}`,
+    `📮 *Pincode:* ${asText(address.pincode)}`,
+    `🗺️ *Map:* ${mapsLink}`,
     '',
-    `Notes: ${asText(order.notes || order.orderDetails?.specialInstructions, 'None')}`,
-    `Created At: ${new Date(order.createdAt || Date.now()).toLocaleString('en-IN')}`,
+    `📝 *Notes:* ${asText(order.notes || order.orderDetails?.specialInstructions, 'None')}`,
+    `🕓 *Time:* ${new Date(order.createdAt || Date.now()).toLocaleString('en-IN')}`,
   ].join('\n');
 };
 
@@ -68,22 +73,24 @@ const sendPlanEnrollmentWhatsAppNotification = async ({ order, user, plan }) => 
     return { sent: false, reason: 'disabled' };
   }
 
-  const targetPhone = normalizePhoneForApi(process.env.WHATSAPP_NOTIFY_PHONE);
-  const apiKey = asText(process.env.WHATSAPP_NOTIFY_API_KEY, '');
+  const botToken = asText(process.env.TELEGRAM_BOT_TOKEN, '');
+  const chatId = asText(process.env.TELEGRAM_CHAT_ID, '');
 
-  if (!targetPhone || !apiKey) {
+  if (!botToken || !chatId) {
     return { sent: false, reason: 'missing_credentials' };
   }
 
   const message = buildEnrollmentMessage({ order, user, plan });
-  const url = new URL(WHATSAPP_API_URL);
-  url.searchParams.set('phone', targetPhone);
-  url.searchParams.set('text', message);
-  url.searchParams.set('apikey', apiKey);
+  const url = `${TELEGRAM_API_BASE}/bot${botToken}/sendMessage`;
 
-  const response = await httpGet(url.toString());
+  const response = await httpPost(url, {
+    chat_id: chatId,
+    text: message,
+    parse_mode: 'Markdown',
+  });
+
   if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw new Error(`WhatsApp API failed with status ${response.statusCode}`);
+    throw new Error(`Telegram API failed with status ${response.statusCode}: ${response.body}`);
   }
 
   return { sent: true };
