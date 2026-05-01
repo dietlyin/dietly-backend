@@ -50,7 +50,14 @@ jobs:
         working-directory: frontend
         run: |
           set -euo pipefail
-          node -e "const fs=require('fs');const f=fs.readFileSync('src/services/api.js','utf8');if(!f.includes('https://api.dietly.in/api')){console.error('Missing production API URL (https://api.dietly.in/api) in frontend API config');process.exit(1)}"
+          node - <<'NODE'
+          const fs = require('fs');
+          const content = fs.readFileSync('src/services/api.js', 'utf8');
+          if (!content.includes('https://api.dietly.in/api')) {
+            console.error('Missing production API URL (https://api.dietly.in/api) in frontend API config');
+            process.exit(1);
+          }
+          NODE
 
       - name: Block localhost URLs in frontend source
         working-directory: frontend
@@ -135,7 +142,20 @@ jobs:
         working-directory: backend
         run: |
           set -euo pipefail
-          node -e "const fs=require('fs');const s=fs.readFileSync('src/server.js','utf8');const checks=[s.includes("app.options('/{*any}', cors(corsOptions));"),s.includes("allowedHeaders: ['Content-Type', 'Authorization']"),s.includes("methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']"),s.includes('process.env.CORS_ORIGIN')];if(checks.includes(false)){console.error('CORS config check failed in src/server.js');process.exit(1)}"
+          node - <<'NODE'
+          const fs = require('fs');
+          const content = fs.readFileSync('src/server.js', 'utf8');
+          const checks = [
+            content.includes("app.options('/{*any}', cors(corsOptions));"),
+            content.includes("allowedHeaders: ['Content-Type', 'Authorization']"),
+            content.includes("methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']"),
+            content.includes('process.env.CORS_ORIGIN'),
+          ];
+          if (checks.includes(false)) {
+            console.error('CORS config check failed in src/server.js');
+            process.exit(1);
+          }
+          NODE
 
       - name: Ensure backend starts without crashing
         working-directory: backend
