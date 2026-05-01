@@ -1,0 +1,259 @@
+name: Production Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: true
+
+env:
+  FRONTEND_REPO: dietlyin/dietly-frontend
+  BACKEND_REPO: dietlyin/dietly-backend
+  NODE_VERSION: "20"
+
+jobs:
+  frontend-build:
+    name: Frontend Build & Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout frontend repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.FRONTEND_REPO }}
+          path: frontend
+          fetch-depth: 1
+          token: ${{ secrets.CI_GH_PAT || github.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint (if script exists)
+        working-directory: frontend
+        run: npm run lint --if-present
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Validate production API URL
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          grep -R "https://api.dietly.in/api" dist >/dev/null || {
+            echo "Missing production API URL (https://api.dietly.in/api) in build output"
+            exit 1
+          }
+
+      - name: Block localhost URLs in build output
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          if grep -R -nE "localhost|127\\.0\\.0\\.1" dist; then
+            echo "Found localhost URL(s) in production build"
+            exit 1
+          fi
+
+      - name: Check MetaMask/web3 auto-init
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          if grep -R -nE "window\\.ethereum|metamask|Web3\\(|web3" src; then
+            echo "Potential MetaMask/web3 auto-init detected; review required"
+            exit 1
+          fi
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+
+  backend-build:
+    name: Backend Build & Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout backend repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.BACKEND_REPO }}
+          path: backend
+          fetch-depth: 1
+          token: ${{ secrets.CI_GH_PAT || github.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Lint (if script exists)
+        working-directory: backend
+        run: npm run lint --if-present
+
+      - name: Tests (if script exists)
+        working-directory: backend
+        run: npm test --if-present
+
+      - name: Build (if script exists)
+        working-directory: backend
+        run: npm run build --if-present
+
+      - name: Ensure .env files are not tracked
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)\\.env($|\\.)'; then
+            echo "Tracked .env file detected. Move secrets to GitHub Secrets/server env."
+            exit 1
+          fi
+
+      - name: Basic hardcoded secret scan
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          if grep -R -nE "(JWT_SECRET=|API_KEY=|SECRET_KEY=|PRIVATE_KEY=)" src; then
+            echo "Potential hardcoded secret found in source"
+            exit 1
+          fi
+
+      - name: Validate CORS config in server
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          grep -n "app.options('/{*any}'" src/server.js >/dev/null
+          grep -n "allowedHeaders: \['Content-Type', 'Authorization'\]" src/server.js >/dev/null
+          grep -n "methods: \['GET', 'POST'" src/server.js >/dev/null
+          grep -n "process.env.CORS_ORIGIN" src/server.js >/dev/null
+
+      - name: Ensure backend starts without crashing
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          PORT=5005 NODE_ENV=production JWT_SECRET=ci_dummy MONGODB_URI=mongodb://127.0.0.1:27017/dietly_ci node src/server.js > /tmp/backend.log 2>&1 &
+          APP_PID=$!
+          sleep 5
+          if ! kill -0 "$APP_PID" 2>/dev/null; then
+            echo "Backend process exited during startup"
+            cat /tmp/backend.log
+            exit 1
+          fi
+          kill "$APP_PID"
+
+  deploy:
+    name: Deploy Frontend + Backend
+    runs-on: ubuntu-latest
+    needs: [frontend-build, backend-build]
+
+    steps:
+      - name: Checkout frontend repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.FRONTEND_REPO }}
+          path: frontend
+          fetch-depth: 1
+          token: ${{ secrets.CI_GH_PAT || github.token }}
+
+      - name: Checkout backend repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.BACKEND_REPO }}
+          path: backend
+          fetch-depth: 1
+          token: ${{ secrets.CI_GH_PAT || github.token }}
+
+      - name: Download frontend build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy frontend to S3
+        run: |
+          set -euo pipefail
+          aws s3 sync frontend/dist s3://${{ secrets.S3_BUCKET }} --delete
+          aws s3 cp frontend/dist/index.html s3://${{ secrets.S3_BUCKET }}/index.html \
+            --cache-control "no-cache, no-store, must-revalidate" \
+            --content-type "text/html"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          set -euo pipefail
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ secrets.CF_DISTRIBUTION_ID }}" \
+            --paths "/*"
+
+      - name: Prepare SSH key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p "${{ secrets.SSH_PORT || '22' }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync backend code to server
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude "node_modules" \
+            --exclude ".env" \
+            -e "ssh -p ${{ secrets.SSH_PORT || '22' }}" \
+            backend/ \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.BACKEND_DEPLOY_PATH }}/"
+
+      - name: Restart backend with PM2 (zero-downtime reload)
+        run: |
+          set -euo pipefail
+          ssh -p "${{ secrets.SSH_PORT || '22' }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" '
+            set -e
+            cd "${{ secrets.BACKEND_DEPLOY_PATH }}"
+            npm ci --omit=dev
+            pm2 reload dietly-backend || pm2 start src/server.js --name dietly-backend
+            pm2 save
+          '
+
+      - name: Post-deploy API health checks
+        run: |
+          set -euo pipefail
+          curl -fsS https://api.dietly.in/api/testimonials >/dev/null
+          curl -fsS https://api.dietly.in/api/plans >/dev/null
+
+      - name: Post-deploy CORS preflight check
+        run: |
+          set -euo pipefail
+          RESP=$(curl -sSI -X OPTIONS "https://api.dietly.in/api/auth/register" \
+            -H "Origin: https://dietly.in" \
+            -H "Access-Control-Request-Method: POST" \
+            -H "Access-Control-Request-Headers: Content-Type,Authorization")
+
+          echo "$RESP" | grep -i "access-control-allow-origin: https://dietly.in" >/dev/null
+          echo "$RESP" | grep -i "access-control-allow-headers:.*content-type" >/dev/null
+          echo "$RESP" | grep -i "access-control-allow-headers:.*authorization" >/dev/null
+          echo "$RESP" | grep -i "access-control-allow-methods:.*GET" >/dev/null
+          echo "$RESP" | grep -i "access-control-allow-methods:.*POST" >/dev/null
+          echo "$RESP" | grep -i "access-control-allow-methods:.*OPTIONS" >/dev/null

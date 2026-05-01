@@ -87,22 +87,6 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'Dietly API is running', timestamp: new Date().toISOString() });
 });
 
-// ── Debug Login Test ──
-app.post('/api/debug-login', async (req, res) => {
-  try {
-    const User = require('./models/User');
-    const bcrypt = require('bcryptjs');
-    const { email, password } = req.body;
-    const bodyRaw = JSON.stringify(req.body);
-    const user = await User.findOne({ email }).select('+password');
-    if (!user) return res.json({ found: false, email, bodyRaw });
-    const isMatch = await user.comparePassword(password);
-    return res.json({ found: true, role: user.role, isMatch, passLen: user.password.length, email, bodyRaw });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
-  }
-});
-
 // ── 404 Handler ──
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
