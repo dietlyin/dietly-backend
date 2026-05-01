@@ -23,6 +23,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ env.FRONTEND_REPO }}
+          ref: main
           path: frontend
           fetch-depth: 1
           token: ${{ secrets.CI_GH_PAT || github.token }}
@@ -93,6 +94,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ env.BACKEND_REPO }}
+          ref: main
           path: backend
           fetch-depth: 1
           token: ${{ secrets.CI_GH_PAT || github.token }}
@@ -181,6 +183,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ env.FRONTEND_REPO }}
+          ref: main
           path: frontend
           fetch-depth: 1
           token: ${{ secrets.CI_GH_PAT || github.token }}
@@ -189,6 +192,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ env.BACKEND_REPO }}
+          ref: main
           path: backend
           fetch-depth: 1
           token: ${{ secrets.CI_GH_PAT || github.token }}
