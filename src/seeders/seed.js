@@ -299,7 +299,7 @@ const seedDB = async () => {
       console.log('👤 Created admin user (admin@dietly.in / admin123456)');
     }
 
-    await DeliveryAgent.insertMany([
+    const deliveryAgentData = [
       {
         name: 'Rohit Courier',
         username: 'delivery.rohit',
@@ -318,7 +318,10 @@ const seedDB = async () => {
         zone: 'West Nagpur',
         isActive: true,
       },
-    ]);
+    ];
+    for (const agentData of deliveryAgentData) {
+      await DeliveryAgent.create(agentData);
+    }
     console.log('🛵 Created delivery users (delivery.rohit / delivery123) and (delivery.saurabh / delivery123)');
 
     console.log('\n✅ Database seeded successfully!');
