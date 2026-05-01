@@ -25,6 +25,7 @@ const normalizePhoneVariants = (rawValue) => {
 const serializeDeliveryAgent = (deliveryAgent) => ({
   id: deliveryAgent._id,
   name: deliveryAgent.name,
+  username: deliveryAgent.username,
   email: deliveryAgent.email,
   phone: deliveryAgent.phone,
   role: deliveryAgent.role,
@@ -36,12 +37,16 @@ exports.loginDeliveryAgent = async (req, res, next) => {
   try {
     const { identifier, password } = req.body;
     const normalizedIdentifier = String(identifier || '').trim();
+    const normalizedLower = normalizedIdentifier.toLowerCase();
     const isEmail = normalizedIdentifier.includes('@');
+    const isPhone = /^\+?[\d\s-]{10,15}$/.test(normalizedIdentifier);
 
     const deliveryAgent = await DeliveryAgent.findOne(
       isEmail
-        ? { email: normalizedIdentifier.toLowerCase() }
-        : { phone: { $in: normalizePhoneVariants(normalizedIdentifier) } }
+        ? { email: normalizedLower }
+        : isPhone
+          ? { phone: { $in: normalizePhoneVariants(normalizedIdentifier) } }
+          : { username: normalizedLower }
     ).select('+password');
 
     if (!deliveryAgent || !deliveryAgent.isActive) {

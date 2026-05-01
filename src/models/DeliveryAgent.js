@@ -8,6 +8,14 @@ const deliveryAgentSchema = new mongoose.Schema({
     trim: true,
     maxlength: [100, 'Name cannot exceed 100 characters'],
   },
+  username: {
+    type: String,
+    required: [true, 'Username is required'],
+    unique: true,
+    lowercase: true,
+    trim: true,
+    minlength: [3, 'Username must be at least 3 characters'],
+  },
   email: {
     type: String,
     unique: true,

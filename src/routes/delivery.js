@@ -10,7 +10,7 @@ const {
 } = require('../controllers/deliveryController');
 
 router.post('/login', [
-  body('identifier').trim().notEmpty().withMessage('Phone number or email is required'),
+  body('identifier').trim().notEmpty().withMessage('Username, phone number or email is required'),
   body('password').notEmpty().withMessage('Password is required'),
 ], validate, loginDeliveryAgent);
 

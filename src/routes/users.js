@@ -2,7 +2,16 @@ const router = require('express').Router();
 const { body } = require('express-validator');
 const validate = require('../middleware/validate');
 const { protect, authorize } = require('../middleware/auth');
-const { getProfile, updateProfile, changePassword, getUsers } = require('../controllers/userController');
+const {
+  getProfile,
+  updateProfile,
+  changePassword,
+  getUsers,
+  getAdminDashboard,
+} = require('../controllers/userController');
+
+// Admin — dashboard summary
+router.get('/admin/dashboard', protect, authorize('admin'), getAdminDashboard);
 
 // Admin — all users
 router.get('/', protect, authorize('admin'), getUsers);

@@ -299,16 +299,27 @@ const seedDB = async () => {
       console.log('👤 Created admin user (admin@dietly.in / admin123456)');
     }
 
-    await DeliveryAgent.create({
-      name: 'Rohit Courier',
-      email: 'delivery@dietly.in',
-      phone: '+919876543210',
-      password: 'delivery123',
-      vehicleType: 'bike',
-      zone: 'South Nagpur',
-      isActive: true,
-    });
-    console.log('🛵 Created delivery agent (delivery@dietly.in / delivery123)');
+    await DeliveryAgent.insertMany([
+      {
+        name: 'Rohit Courier',
+        username: 'delivery.rohit',
+        phone: '+919876543210',
+        password: 'delivery123',
+        vehicleType: 'bike',
+        zone: 'South Nagpur',
+        isActive: true,
+      },
+      {
+        name: 'Saurabh Rider',
+        username: 'delivery.saurabh',
+        phone: '+919701112233',
+        password: 'delivery123',
+        vehicleType: 'scooter',
+        zone: 'West Nagpur',
+        isActive: true,
+      },
+    ]);
+    console.log('🛵 Created delivery users (delivery.rohit / delivery123) and (delivery.saurabh / delivery123)');
 
     console.log('\n✅ Database seeded successfully!');
     process.exit(0);

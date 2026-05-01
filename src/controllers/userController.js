@@ -1,4 +1,8 @@
 const User = require('../models/User');
+const Order = require('../models/Order');
+const Plan = require('../models/Plan');
+const Contact = require('../models/Contact');
+const GymPartnership = require('../models/GymPartnership');
 
 // @desc    Get user profile
 // @route   GET /api/users/profile
@@ -77,6 +81,144 @@ exports.getUsers = async (req, res, next) => {
       page,
       pages: Math.ceil(total / limit),
       data: users,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Get admin dashboard summary
+// @route   GET /api/users/admin/dashboard
+exports.getAdminDashboard = async (req, res, next) => {
+  try {
+    const [
+      totalUsers,
+      activeUsers,
+      totalOrders,
+      activePlans,
+      deliveredOrders,
+      pendingOrders,
+      preparingOrders,
+      outForDeliveryOrders,
+      cancelledOrders,
+      totalContacts,
+      newContacts,
+      totalGymApplications,
+      pendingGymApplications,
+      recentUsers,
+      recentOrders,
+      planPerformance,
+      revenueAgg,
+      monthlyOrdersAgg,
+    ] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ subscriptionStatus: 'active' }),
+      Order.countDocuments(),
+      Plan.countDocuments({ isActive: true }),
+      Order.countDocuments({ status: 'delivered' }),
+      Order.countDocuments({ status: 'pending' }),
+      Order.countDocuments({ status: 'preparing' }),
+      Order.countDocuments({ status: 'out-for-delivery' }),
+      Order.countDocuments({ status: 'cancelled' }),
+      Contact.countDocuments(),
+      Contact.countDocuments({ status: 'new' }),
+      GymPartnership.countDocuments(),
+      GymPartnership.countDocuments({ status: 'pending' }),
+      User.find()
+        .select('name email phone role subscriptionStatus createdAt')
+        .sort('-createdAt')
+        .limit(8),
+      Order.find()
+        .populate('user', 'name email phone')
+        .populate('plan', 'name price')
+        .select('amount status paymentStatus createdAt user plan')
+        .sort('-createdAt')
+        .limit(8),
+      Order.aggregate([
+        { $match: { status: { $ne: 'cancelled' } } },
+        {
+          $group: {
+            _id: '$plan',
+            purchases: { $sum: 1 },
+            revenue: { $sum: '$amount' },
+          },
+        },
+        { $sort: { purchases: -1 } },
+        { $limit: 10 },
+        {
+          $lookup: {
+            from: 'plans',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'plan',
+          },
+        },
+        { $unwind: { path: '$plan', preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            _id: 1,
+            purchases: 1,
+            revenue: 1,
+            name: '$plan.name',
+            slug: '$plan.slug',
+          },
+        },
+      ]),
+      Order.aggregate([
+        { $match: { status: { $ne: 'cancelled' } } },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: '$amount' },
+          },
+        },
+      ]),
+      Order.aggregate([
+        {
+          $group: {
+            _id: {
+              year: { $year: '$createdAt' },
+              month: { $month: '$createdAt' },
+            },
+            orders: { $sum: 1 },
+            revenue: {
+              $sum: {
+                $cond: [{ $ne: ['$status', 'cancelled'] }, '$amount', 0],
+              },
+            },
+          },
+        },
+        { $sort: { '_id.year': -1, '_id.month': -1 } },
+        { $limit: 6 },
+      ]),
+    ]);
+
+    const totalRevenue = revenueAgg[0]?.totalRevenue || 0;
+
+    res.json({
+      success: true,
+      data: {
+        kpis: {
+          totalUsers,
+          activeUsers,
+          activePlans,
+          totalOrders,
+          deliveredOrders,
+          pendingOrders,
+          preparingOrders,
+          outForDeliveryOrders,
+          cancelledOrders,
+          totalRevenue,
+          totalContacts,
+          newContacts,
+          totalGymApplications,
+          pendingGymApplications,
+        },
+        recentUsers,
+        recentOrders,
+        planPerformance,
+        monthlyTrend: monthlyOrdersAgg.reverse(),
+      },
     });
   } catch (err) {
     next(err);

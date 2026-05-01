@@ -7,15 +7,16 @@ const connectDB = require('./config/db');
 
 const app = express();
 
+// Trust reverse proxy (Apache/Cloudflare) — required for rate-limit + X-Forwarded-For
+app.set('trust proxy', 1);
+
 // ── Connect to MongoDB (awaited per-request for serverless cold starts) ──
 app.use(async (req, res, next) => {
   await connectDB();
   next();
 });
 
-// ── Global Middleware ──
-app.use(helmet());
-
+// ── CORS ──
 const configuredOrigins = String(process.env.CORS_ORIGIN || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -30,13 +31,22 @@ const allowedOrigins = [
   ...configuredOrigins,
 ];
 
-app.use(cors({
+const corsOptions = {
   origin: (origin, cb) => {
     if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    cb(null, false);
+    cb(new Error(`CORS: origin '${origin}' not allowed`));
   },
   credentials: true,
-}));
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+// Handle OPTIONS preflight before any other middleware (Express 5 pattern)
+app.options('/{*any}', cors(corsOptions));
+app.use(cors(corsOptions));
+
+// ── Global Middleware ──
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
@@ -77,6 +87,22 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'Dietly API is running', timestamp: new Date().toISOString() });
 });
 
+// ── Debug Login Test ──
+app.post('/api/debug-login', async (req, res) => {
+  try {
+    const User = require('./models/User');
+    const bcrypt = require('bcryptjs');
+    const { email, password } = req.body;
+    const bodyRaw = JSON.stringify(req.body);
+    const user = await User.findOne({ email }).select('+password');
+    if (!user) return res.json({ found: false, email, bodyRaw });
+    const isMatch = await user.comparePassword(password);
+    return res.json({ found: true, role: user.role, isMatch, passLen: user.password.length, email, bodyRaw });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 // ── 404 Handler ──
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
@@ -86,7 +112,7 @@ app.use((req, res) => {
 app.use((err, req, res, _next) => {
   console.error('Error:', err.message);
 
-  if (err.name === 'ValidationError') {
+  if (err.name === 'ValidationError' && err.errors) {
     const messages = Object.values(err.errors).map(e => e.message);
     return res.status(400).json({ success: false, message: 'Validation Error', errors: messages });
   }
